@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+
+  .header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .header-logo { width: 28px; height: 28px; background: #c9450a; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 14px; }
+  .header-title { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+  .header-sub { font-size: 12px; color: #888; }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar { width: 320px; background: #fff; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .sidebar-section { padding: 16px; border-bottom: 1px solid #f0f0f0; }
+  .sidebar-section:last-child { border-bottom: none; }
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 10px; }
+
+  .upload-zone { border: 1.5px dashed #d0d0d0; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: #fafafa; }
+  .upload-zone:hover { border-color: #c9450a; background: #fff5f2; }
+  .upload-zone.has-file { border-color: #22a06b; background: #f0faf5; border-style: solid; }
+  .upload-icon { font-size: 24px; margin-bottom: 8px; }
+  .upload-text { font-size: 13px; color: #555; }
+  .upload-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
+  .file-name { font-size: 12px; color: #22a06b; font-weight: 500; margin-top: 6px; }
+  #file-input { display: none; }
+
+  .sheet-select { width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fff; color: #1a1a1a; cursor: pointer; }
+  .sheet-select:focus { outline: none; border-color: #c9450a; }
+
+  .data-preview { background: #fafafa; border-radius: 8px; padding: 10px; font-size: 11px; color: #555; max-height: 120px; overflow: auto; border: 1px solid #f0f0f0; }
+  .data-preview table { width: 100%; border-collapse: collapse; }
+  .data-preview th { background: #f0f0f0; padding: 4px 8px; text-align: left; font-weight: 600; color: #333; border-bottom: 1px solid #e0e0e0; white-space: nowrap; }
+  .data-preview td { padding: 3px 8px; border-bottom: 1px solid #f5f5f5; white-space: nowrap; }
+
+  .prompt-textarea { width: 100%; padding: 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 100px; color: #1a1a1a; background: #fff; line-height: 1.5; }
+  .prompt-textarea:focus { outline: none; border-color: #c9450a; }
+
+  .api-input { width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 13px; font-family: monospace; color: #1a1a1a; background: #fff; }
+  .api-input:focus { outline: none; border-color: #c9450a; }
+  .api-hint { font-size: 11px; color: #aaa; margin-top: 5px; }
+  .api-hint a { color: #c9450a; text-decoration: none; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .chat-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  .welcome { text-align: center; padding: 60px 20px; color: #aaa; }
+  .welcome-icon { font-size: 40px; margin-bottom: 12px; }
+  .welcome-title { font-size: 18px; font-weight: 600; color: #555; margin-bottom: 8px; }
+  .welcome-text { font-size: 14px; line-height: 1.6; }
+
+  .message { display: flex; gap: 10px; max-width: 100%; }
+  .message.user { flex-direction: row-reverse; }
+  .message-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+  .message.user .message-avatar { background: #e8f0fe; color: #1967d2; }
+  .message.assistant .message-avatar { background: #c9450a; color: #fff; }
+  .message-content { max-width: calc(100% - 80px); }
+  .message-bubble { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 12px 16px; font-size: 14px; line-height: 1.6; color: #1a1a1a; }
+  .message.user .message-bubble { background: #1967d2; color: #fff; border-color: transparent; }
+
+  .dashboard-block { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 16px; margin-top: 8px; }
+  .dashboard-title { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 12px; }
+
+  .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 8px; }
+  .chart-card { background: #fafafa; border: 1px solid #f0f0f0; border-radius: 10px; padding: 14px; }
+  .chart-card-title { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chart-wrapper { position: relative; height: 200px; }
+
+  .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 8px; }
+  .metric-card { background: #fafafa; border: 1px solid #f0f0f0; border-radius: 10px; padding: 12px; text-align: center; }
+  .metric-value { font-size: 22px; font-weight: 700; color: #1a1a1a; }
+  .metric-label { font-size: 11px; color: #888; margin-top: 4px; }
+
+  .insight-block { background: #fff5f2; border-left: 3px solid #c9450a; border-radius: 0 8px 8px 0; padding: 10px 14px; margin-top: 8px; font-size: 13px; line-height: 1.6; color: #333; }
+
+  .loading-dots { display: inline-flex; gap: 4px; padding: 12px 16px; background: #f0f0f0; border-radius: 12px; }
+  .dot { width: 7px; height: 7px; background: #bbb; border-radius: 50%; animation: bounce 1.2s infinite; }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+  .input-area { border-top: 1px solid #e0e0e0; background: #fff; padding: 14px 20px; flex-shrink: 0; }
+  .input-row { display: flex; gap: 10px; align-items: flex-end; }
+  .question-input { flex: 1; padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 14px; font-family: inherit; resize: none; min-height: 42px; max-height: 120px; color: #1a1a1a; line-height: 1.5; }
+  .question-input:focus { outline: none; border-color: #c9450a; }
+  .send-btn { padding: 10px 20px; background: #c9450a; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; height: 42px; }
+  .send-btn:hover { background: #a83608; }
+  .send-btn:disabled { background: #ddd; cursor: not-allowed; }
+
+  .error-msg { background: #fff0f0; border: 1px solid #fcc; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #c00; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">C</div>
+  <div>
+    <div class="header-title">Claude Analytics</div>
+    <div class="header-sub">Анализ Excel данных с дашбордами</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">API ключ</div>
+      <input type="password" class="api-input" id="api-key" placeholder="sk-ant-api03-..." />
+      <div class="api-hint">Получить на <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Excel файл</div>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">📊</div>
+        <div class="upload-text">Нажмите чтобы загрузить</div>
+        <div class="upload-hint">.xlsx, .xls, .csv</div>
+        <div class="file-name" id="file-name" style="display:none"></div>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" />
+    </div>
+
+    <div class="sidebar-section" id="sheet-section" style="display:none">
+      <div class="section-label">Лист</div>
+      <select class="sheet-select" id="sheet-select"></select>
+    </div>
+
+    <div class="sidebar-section" id="preview-section" style="display:none">
+      <div class="section-label">Предпросмотр данных</div>
+      <div class="data-preview" id="data-preview"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Системный промпт</div>
+      <textarea class="prompt-textarea" id="system-prompt">Ты аналитик данных. Пользователь загружает данные из Excel. Твоя задача — анализировать данные и возвращать ответы в специальном JSON формате для отображения дашбордов.
+
+ВСЕГДА отвечай в формате JSON:
+{
+  "text": "Текстовый анализ и выводы",
+  "metrics": [{"label": "Название", "value": "Значение"}],
+  "charts": [
+    {
+      "type": "bar|line|pie|doughnut",
+      "title": "Заголовок графика",
+      "labels": ["A","B","C"],
+      "datasets": [{"label": "Серия", "data": [1,2,3]}]
+    }
+  ],
+  "insights": ["Ключевой вывод 1", "Ключевой вывод 2"]
+}
+
+Если данных для графиков нет — верни пустые массивы. Отвечай на русском языке.</textarea>
+    </div>
+
+  </div>
+
+  <div class="main">
+    <div class="chat-area" id="chat-area">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">📈</div>
+        <div class="welcome-title">Готов к анализу</div>
+        <div class="welcome-text">Загрузите Excel файл, введите API ключ<br>и задайте вопрос по данным</div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="input-row">
+        <textarea class="question-input" id="question-input" placeholder="Задайте вопрос по данным..." rows="1"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">Отправить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let workbook = null;
+let currentSheetData = null;
+let chatHistory = [];
+let chartInstances = [];
+
+document.getElementById('file-input').addEventListener('change', handleFileUpload);
+document.getElementById('sheet-select').addEventListener('change', loadSheetData);
+document.getElementById('question-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      workbook = XLSX.read(data, { type: 'array' });
+
+      document.getElementById('file-name').textContent = file.name;
+      document.getElementById('file-name').style.display = 'block';
+      document.getElementById('upload-zone').classList.add('has-file');
+
+      const sheetSelect = document.getElementById('sheet-select');
+      sheetSelect.innerHTML = '';
+      workbook.SheetNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sheetSelect.appendChild(opt);
+      });
+      document.getElementById('sheet-section').style.display = 'block';
+      loadSheetData();
+    } catch(err) {
+      alert('Ошибка чтения файла: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function loadSheetData() {
+  const sheetName = document.getElementById('sheet-select').value;
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  currentSheetData = json;
+
+  const preview = document.getElementById('data-preview');
+  const rows = json.slice(0, 5);
+  if (rows.length === 0) { preview.innerHTML = '<em>Нет данных</em>'; return; }
+
+  let html = '<table>';
+  rows.forEach((row, i) => {
+    html += '<tr>';
+    row.slice(0, 8).forEach(cell => {
+      const tag = i === 0 ? 'th' : 'td';
+      html += `<${tag}>${cell !== undefined ? cell : ''}</${tag}>`;
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  preview.innerHTML = html;
+  document.getElementById('preview-section').style.display = 'block';
+}
+
+function getDataContext() {
+  if (!currentSheetData) return '';
+  const sheetName = document.getElementById('sheet-select').value;
+  const rows = currentSheetData.slice(0, 100);
+  const csvRows = rows.map(r => r.join('\t'));
+  return `\n\nДанные из листа "${sheetName}" (${currentSheetData.length} строк):\n${csvRows.join('\n')}`;
+}
+
+async function sendMessage() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  const question = document.getElementById('question-input').value.trim();
+  const systemPrompt = document.getElementById('system-prompt').value;
+
+  if (!apiKey) { alert('Введите API ключ'); return; }
+  if (!question) return;
+
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('question-input').value = '';
+  document.getElementById('send-btn').disabled = true;
+
+  appendMessage('user', question);
+
+  const loadingEl = appendLoading();
+
+  const dataContext = getDataContext();
+  const userMessage = question + (dataContext ? dataContext : '');
+
+  chatHistory.push({ role: 'user', content: userMessage });
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: chatHistory
+      })
+    });
+
+    const data = await response.json();
+    loadingEl.remove();
+
+    if (data.error) {
+      appendError(data.error.message);
+      chatHistory.pop();
+    } else {
+      const rawText = data.content[0].text;
+      chatHistory.push({ role: 'assistant', content: rawText });
+      renderResponse(rawText);
+    }
+  } catch(err) {
+    loadingEl.remove();
+    appendError('Ошибка соединения: ' + err.message);
+    chatHistory.pop();
+  }
+
+  document.getElementById('send-btn').disabled = false;
+}
+
+function renderResponse(rawText) {
+  let parsed = null;
+  try {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+  } catch(e) {}
+
+  const chatArea = document.getElementById('chat-area');
+  const msgEl = document.createElement('div');
+  msgEl.className = 'message assistant';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'message-avatar';
+  avatar.textContent = 'C';
+
+  const contentEl = document.createElement('div');
+  contentEl.className = 'message-content';
+
+  if (parsed) {
+    if (parsed.text) {
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.textContent = parsed.text;
+      contentEl.appendChild(bubble);
+    }
+
+    if (parsed.metrics && parsed.metrics.length > 0) {
+      const metricsRow = document.createElement('div');
+      metricsRow.className = 'metrics-row';
+      parsed.metrics.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'metric-card';
+        card.innerHTML = `<div class="metric-value">${m.value}</div><div class="metric-label">${m.label}</div>`;
+        metricsRow.appendChild(card);
+      });
+      contentEl.appendChild(metricsRow);
+    }
+
+    if (parsed.charts && parsed.charts.length > 0) {
+      const grid = document.createElement('div');
+      grid.className = 'charts-grid';
+      parsed.charts.forEach((chartDef, idx) => {
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+        card.innerHTML = `<div class="chart-card-title">${chartDef.title || ''}</div><div class="chart-wrapper"><canvas id="chart-${Date.now()}-${idx}"></canvas></div>`;
+        grid.appendChild(card);
+        contentEl.appendChild(grid);
+
+        setTimeout(() => {
+          const canvasId = card.querySelector('canvas').id;
+          const ctx = document.getElementById(canvasId);
+          if (!ctx) return;
+          const colors = ['#c9450a','#1967d2','#22a06b','#e8a100','#8b5cf6','#ef4444'];
+          const datasets = (chartDef.datasets || []).map((ds, i) => ({
+            label: ds.label || '',
+            data: ds.data || [],
+            backgroundColor: chartDef.type === 'line' ? colors[i % colors.length] + '33' : colors.slice(0, (ds.data||[]).length),
+            borderColor: chartDef.type === 'line' ? colors[i % colors.length] : colors.slice(0, (ds.data||[]).length),
+            borderWidth: 2,
+            fill: chartDef.type === 'line',
+            tension: 0.3,
+            pointRadius: 4
+          }));
+          new Chart(ctx, {
+            type: chartDef.type || 'bar',
+            data: { labels: chartDef.labels || [], datasets },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { labels: { font: { size: 11 }, boxWidth: 12 } } },
+              scales: ['pie','doughnut'].includes(chartDef.type) ? {} : {
+                x: { ticks: { font: { size: 11 } }, grid: { color: '#f0f0f0' } },
+                y: { ticks: { font: { size: 11 } }, grid: { color: '#f0f0f0' } }
+              }
+            }
+          });
+        }, 100);
+      });
+    }
+
+    if (parsed.insights && parsed.insights.length > 0) {
+      parsed.insights.forEach(insight => {
+        const block = document.createElement('div');
+        block.className = 'insight-block';
+        block.textContent = '💡 ' + insight;
+        contentEl.appendChild(block);
+      });
+    }
+  } else {
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = rawText;
+    contentEl.appendChild(bubble);
+  }
+
+  msgEl.appendChild(avatar);
+  msgEl.appendChild(contentEl);
+  chatArea.appendChild(msgEl);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function appendMessage(role, text) {
+  const chatArea = document.getElementById('chat-area');
+  const msgEl = document.createElement('div');
+  msgEl.className = `message ${role}`;
+  const avatar = document.createElement('div');
+  avatar.className = 'message-avatar';
+  avatar.textContent = role === 'user' ? 'Вы' : 'C';
+  const content = document.createElement('div');
+  content.className = 'message-content';
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  bubble.textContent = text;
+  content.appendChild(bubble);
+  msgEl.appendChild(avatar);
+  msgEl.appendChild(content);
+  chatArea.appendChild(msgEl);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function appendLoading() {
+  const chatArea = document.getElementById('chat-area');
+  const el = document.createElement('div');
+  el.className = 'message assistant';
+  el.innerHTML = `<div class="message-avatar">C</div><div class="loading-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+  chatArea.appendChild(el);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return el;
+}
+
+function appendError(msg) {
+  const chatArea = document.getElementById('chat-area');
+  const el = document.createElement('div');
+  el.className = 'error-msg';
+  el.textContent = '⚠️ ' + msg;
+  chatArea.appendChild(el);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+</script>
+</body>
+</html>
